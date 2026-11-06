@@ -8,6 +8,10 @@
 <meta name="theme-color" content="#302863">
 <link rel="preload" href="assets/page1.jpg" as="image" media="(orientation:landscape)">
 <link rel="preload" href="fonts/hind-devanagari-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+// hide pages before first paint so they can slide in (skipped if the visitor prefers reduced motion)
+if('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.classList.add('slides');
+</script>
 <style>
 @font-face{font-family:'Hind';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/hind-devanagari-400-normal.woff2) format('woff2');unicode-range:U+0900-097F,U+1CD0-1CF9,U+200C-200D,U+20A8,U+20B9,U+25CC,U+A830-A839,U+A8E0-A8FF}
 @font-face{font-family:'Hind';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/hind-latin-400-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
@@ -30,6 +34,13 @@ a{color:inherit;text-decoration:none}
 .page{position:relative;transform:translateZ(0)}
 .page>.full{width:100%;height:auto;aspect-ratio:1282/823;user-select:none;-webkit-user-drag:none}
 .page>.m{display:none}
+
+/* ---------- PAGE SLIDE-IN: odd pages from the left, even pages from the right ---------- */
+.slide-frame{overflow:hidden;overflow:clip}
+html.slides .page:not(.slide-in){transform:translate3d(-100%,0,0)}
+html.slides :is(#page-2,#page-4):not(.slide-in){transform:translate3d(100%,0,0)}
+.page.slide-in{transition:transform .9s cubic-bezier(.22,1,.36,1)}
+@media print{html.slides .page:not(.slide-in),html.slides :is(#page-2,#page-4):not(.slide-in){transform:none}}
 
 /* ---------- PORTRAIT: responsive rebuild ---------- */
 @media (orientation:portrait){
@@ -289,6 +300,35 @@ a{color:inherit;text-decoration:none}
 
 <script src="js/lenis.min.js"></script>
 <script>
+(function(){
+  if(!document.documentElement.classList.contains('slides')) return;
+  // The moving page reports itself as off-screen, so a still frame around it is what gets observed.
+  var frames=[].map.call(document.querySelectorAll('.page'),function(page){
+    var frame=document.createElement('div');
+    frame.className='slide-frame';
+    page.parentNode.insertBefore(frame,page);
+    frame.appendChild(page);
+    return frame;
+  });
+  var started=false;
+  function start(){
+    if(started) return;
+    started=true;
+    // slide in once a little of the page is showing
+    var enter=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting) e.target.firstChild.classList.add('slide-in'); });
+    },{rootMargin:'0px 0px -15% 0px'});
+    // re-arm once the page is fully out of view, so it slides again on the way back
+    var leave=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(!e.isIntersecting) e.target.firstChild.classList.remove('slide-in'); });
+    });
+    frames.forEach(function(f){ enter.observe(f); leave.observe(f); });
+  }
+  // landscape: hold page 1 until its image is ready, so a loaded picture slides in rather than an empty box
+  var first=document.querySelector('#page-1>.full');
+  if(!matchMedia('(orientation:landscape)').matches || first.complete) start();
+  else { first.addEventListener('load',start); first.addEventListener('error',start); setTimeout(start,1500); }
+})();
 (function(){
   // landscape: warm up all four page images right away so nothing pops in while scrolling
   function warm(){ if(!matchMedia('(orientation:landscape)').matches) return;
